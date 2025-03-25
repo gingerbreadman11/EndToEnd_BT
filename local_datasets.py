@@ -3,7 +3,7 @@ import os
 import pickle
 from glob import glob
 import torch
-import torchvision
+import torchvision as tv
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as T
 import torchvision.transforms.functional as F
@@ -14,6 +14,7 @@ import cv2 as cv
 import string
 import utils
 from tqdm import tqdm
+from torchvision import datasets, transforms
 
 def get_ade20k_dataset(cfg):
     trainset = ADE_Dataset(device=cfg['device'],
@@ -381,4 +382,33 @@ class Character_Dataset(Dataset):
             img = img.flip([2])
 
         return img.to(self.device), lbl.to(self.device)
+
+def get_mnist_dataset(cfg):
+    # Define transformations
+    size = (128, 128)
+    base_transforms = [transforms.Resize(size),
+                       transforms.Grayscale(),
+                       transforms.ToTensor(),
+                       transforms.Normalize((0.1307,), (0.3081,))]
+    if cfg.get('flip_vertical', False):
+        base_transforms.append(transforms.RandomVerticalFlip())
+    if cfg.get('flip_horizontal', False):
+        base_transforms.append(transforms.RandomHorizontalFlip())
+
+    # Compose the final transformation pipeline
+    transform = transforms.Compose(base_transforms)
+
+    # Use the absolute path to your MNIST data
+    absolute_path = '/Users/alexanderbensland/Desktop/Bachelor Thesis/Code/EndToEnd_BT/_Datasets'
+    
+    # Load the datasets with the absolute path
+    trainset = tv.datasets.MNIST(root=absolute_path, train=True, download=False, transform=transform)
+    valset = tv.datasets.MNIST(root=absolute_path, train=False, download=False, transform=transform)
+
+    if cfg.get('subset', False):
+        print("Using subset of the data")
+        trainset = utils.data_subset(trainset, cfg['subset'])
+        valset = utils.data_subset(valset, cfg['subset'])
+
+    return trainset, valset
 

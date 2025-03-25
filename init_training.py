@@ -90,18 +90,36 @@ class L1FeatureLoss(object):
 
 
 def get_dataset(cfg):
-    if cfg['dataset'] == 'ADE20K':
-        trainset, valset = local_datasets.get_ade20k_dataset(cfg)
+    if cfg['dataset'] == 'ADE50K':
+        trainset, valset = local_datasets.get_ade50k_dataset(cfg)
     elif cfg['dataset'] == 'BouncingMNIST':
         trainset, valset = local_datasets.get_bouncing_mnist_dataset(cfg)
     elif cfg['dataset'] == 'Characters':
         trainset, valset = local_datasets.get_character_dataset(cfg)
-        
-    trainloader = DataLoader(trainset, batch_size=cfg['batch_size'],shuffle=True, drop_last=True)
-    valloader = DataLoader(valset,batch_size=cfg['batch_size'],shuffle=False, drop_last=True)
-    example_batch = next(iter(valloader))
-    cfg['circular_mask'] = trainset._mask.to(cfg['device'])
+    elif cfg['dataset'] == 'MNIST':
+        trainset, valset = local_datasets.get_mnist_dataset(cfg)
+    elif cfg['dataset'] == 'spiking_MNIST':
+        trainset, valset = local_datasets.get_spiking_mnist_dataset(cfg)
+    elif cfg['dataset'] == 'NMNIST_to_MNIST':
+        # Load datasets
+        nmnist_data, nmnist_data_val = local_datasets.get_nmnist_dataset(cfg)
+        mnist_data, mnist_data_val = local_datasets.get_mnist_dataset(cfg)
 
+        trainset = local_datasets.MatchingNMNISTMNISTDataset(nmnist_data, mnist_data, cfg['matches_train_file'])
+        valset = local_datasets.MatchingNMNISTMNISTDataset(nmnist_data_val, mnist_data_val, cfg['matches_test_file'])
+
+    trainloader = DataLoader(trainset, batch_size=cfg['batch_size'], shuffle=True, drop_last=True)
+    valloader = DataLoader(valset, batch_size=cfg['batch_size'], shuffle=False, drop_last=True)
+    example_batch = next(iter(valloader))
+    
+    # ------------------------------------------------
+    size = 128  
+    mask = torch.ones(1, size, size)
+    y, x = torch.meshgrid(torch.linspace(-1, 1, size), torch.linspace(-1, 1, size))
+    mask *= (x.pow(2) + y.pow(2)) <= 1
+    
+    cfg['circular_mask'] = mask.to(cfg['device'])
+    # ------------------------------------------------ fix: quick fix for MNIST (maybe make sure if it makes sense)
     dataset = {'trainset': trainset,
                'valset': valset,
                'trainloader': trainloader,
@@ -114,12 +132,14 @@ def get_dataset(cfg):
 def get_models(cfg):
     if cfg['model_architecture'] == 'end-to-end-autoencoder':
         encoder, decoder = model.get_e2e_autoencoder(cfg)
-        optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'])
     elif cfg['model_architecture'] == 'zhao-autoencoder':
         encoder, decoder = model.get_Zhao_autoencoder(cfg)
-        optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'])
+    elif cfg['model_architecture'] == 'crnn-autoencoder':
+        encoder, decoder = model.get_CRNN_autoencoder(cfg)
     else:
         raise NotImplementedError
+
+    optimizer = torch.optim.Adam([*encoder.parameters(), *decoder.parameters()], lr=cfg['learning_rate'])
 
     simulator = get_simulator(cfg)
 

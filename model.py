@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import math
+from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
 def get_e2e_autoencoder(cfg):
 
@@ -308,3 +309,106 @@ def get_interaction_model(electrode_coords, data_kwargs, interaction):
         raise NotImplementedError(f'Undefined interaction: {interaction}')
 
     return interaction_model
+
+class CRNN(nn.Module):
+    """
+    Convolutional Recurrent Neural Network that uses a pretrained EfficientNet_B0 
+    for feature extraction and an RNN layer for temporal processing
+    """
+    def __init__(self, in_channels=3, n_electrodes=638, out_scaling=1e-4, 
+                 out_activation='relu', rnn_type='lstm', hidden_size=256):
+        super(CRNN, self).__init__()
+        self.output_scaling = out_scaling
+        self.hidden_size = hidden_size
+        
+        # Define output activation
+        self.out_activation = {'tanh': nn.Tanh(),
+                              'sigmoid': nn.Sigmoid(),
+                              'relu': nn.ReLU(),
+                              'softmax': nn.Softmax(dim=1)}[out_activation]
+        
+        # Load pretrained EfficientNet_B0
+        self.feature_extractor = efficientnet_b0(weights=EfficientNet_B0_Weights.IMAGENET1K_V1)
+        # Replace first conv layer if input channels != 3
+        if in_channels != 3:
+            self.feature_extractor.features[0][0] = nn.Conv2d(in_channels, 32, kernel_size=3, stride=2, padding=1, bias=False)
+        
+        # Remove the classifier head
+        self.feature_extractor = self.feature_extractor.features
+        
+        # Get feature dimension from EfficientNet (1280 for B0)
+        self.feature_dim = 1280
+        
+        # RNN layer
+        if rnn_type.lower() == 'lstm':
+            self.rnn = nn.LSTM(self.feature_dim, hidden_size, batch_first=True)
+        elif rnn_type.lower() == 'gru':
+            self.rnn = nn.GRU(self.feature_dim, hidden_size, batch_first=True)
+        else:
+            raise ValueError(f"Unsupported RNN type: {rnn_type}")
+            
+        # Output layer
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, n_electrodes),
+            self.out_activation
+        )
+
+    def forward(self, x):
+        # MNIST gives us [batch_size, channels, height, width]
+        # but our model expects [batch_size, sequence_length, channels, height, width]
+        
+        # Check if input is 4D (missing sequence dimension)
+        if len(x.shape) == 4:
+            # Add a sequence dimension with length 1
+            x = x.unsqueeze(1)  # Now [batch_size, 1, channels, height, width]
+        
+        batch_size, seq_len = x.size(0), x.size(1)
+        
+        # Reshape for CNN processing
+        x_reshaped = x.view(batch_size * seq_len, *x.shape[2:])
+        
+        # Extract features with EfficientNet
+        features = self.feature_extractor(x_reshaped)
+        features = F.adaptive_avg_pool2d(features, (1, 1))
+        features = features.reshape(batch_size, seq_len, self.feature_dim)
+        
+        # Process with RNN
+        rnn_out, _ = self.rnn(features)
+        
+        # Get output for last time step
+        last_output = rnn_out[:, -1, :]
+        
+        # Generate stimulation pattern
+        stimulation = self.fc(last_output)
+        
+        # Apply scaling
+        stimulation = stimulation * self.output_scaling
+        
+        return stimulation
+
+def get_CRNN_autoencoder(cfg):
+    """
+    Returns a CRNN encoder and compatible decoder based on configuration
+    """
+    # Initialize encoder
+    encoder = CRNN(in_channels=cfg['in_channels'],
+                   n_electrodes=cfg['n_electrodes'],
+                   out_scaling=cfg['output_scaling'],
+                   out_activation=cfg['encoder_out_activation'],
+                   rnn_type=cfg.get('rnn_type', 'lstm'),
+                   hidden_size=cfg.get('hidden_size', 256)).to(cfg['device'])
+    
+    # Initialize decoder (reuse existing E2E_Decoder)
+    decoder = E2E_Decoder(out_channels=cfg['out_channels'],
+                          out_activation=cfg['decoder_out_activation']).to(cfg['device'])
+    
+    # Apply safety layer if specified
+    if cfg.get('output_steps', 'None') != 'None':
+        assert cfg['encoder_out_activation'] == 'sigmoid'
+        encoder.output_scaling = 1.0
+        encoder = torch.nn.Sequential(encoder,
+                                     SafetyLayer(n_steps=10,
+                                                order=2,
+                                                out_scaling=cfg['output_scaling'])).to(cfg['device'])
+    
+    return encoder, decoder
