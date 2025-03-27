@@ -7,6 +7,15 @@ from utils import resize, normalize, load_config, save_pickle, CustomSummaryTrac
 import init_training
 import argparse
 
+
+# ------------------------------------------------ 
+def ensure_dir_exists(path):
+    """Make sure the directory exists, creating it if needed"""
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
+        print(f"Created directory: {path}")
+# ------------------------------------------------
+
 def train(dataset, models, training_pipeline, logging, cfg):
     # Unpack
     trainloader = dataset['trainloader']
@@ -187,6 +196,7 @@ def get_validation_results(dataset, models, training_pipeline, cfg):
 
 def save_validation_results(output, performance, cfg):
     path = os.path.join(cfg['save_path'], 'validation_results')
+    ensure_dir_exists(path)
     print(f'Saving validation results to {path}')
     if output is not None:
         output = {k: torch.cat(v) for k, v in output.get().items()}  # concatenate batches

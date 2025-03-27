@@ -172,6 +172,7 @@ class E2E_Encoder(nn.Module):
     def forward(self, x):
         self.out = self.model(x)
         stimulation = self.out*self.output_scaling #scaling improves numerical stability
+        print(f"Stimulation range: [{stimulation.min():.3f}, {stimulation.max():.3f}]")
         return stimulation
 
 class E2E_Decoder(nn.Module):
@@ -410,5 +411,91 @@ def get_CRNN_autoencoder(cfg):
                                      SafetyLayer(n_steps=10,
                                                 order=2,
                                                 out_scaling=cfg['output_scaling'])).to(cfg['device'])
+    
+    return encoder, decoder
+
+class SimpleCRNN(nn.Module):
+    """Simplified CRNN for debugging"""
+    def __init__(self, in_channels=1, n_electrodes=60, out_scaling=1.0, 
+                 out_activation='sigmoid'):
+        super(SimpleCRNN, self).__init__()
+        self.output_scaling = out_scaling
+        self.n_electrodes = n_electrodes
+        
+        
+
+        self.out_activation = {'tanh': nn.Tanh(), ## NOTE: simulator expects only positive stimulation values 
+                               'sigmoid': nn.Sigmoid(),
+                               'relu': nn.ReLU(),
+                               'softmax':nn.Softmax(dim=1)}[out_activation]
+        
+        # Simple CNN backbone with better feature differentiation
+        self.feature_extractor = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=5, stride=2, padding=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(16),
+            nn.Conv2d(16, 32, kernel_size=5, stride=2, padding=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+            nn.AdaptiveAvgPool2d((1, 1))
+        )
+        
+        # Simple RNN
+        self.rnn = nn.LSTM(32, 64, batch_first=True)
+        
+        # Output layer with controlled range
+        self.fc = nn.Sequential(
+            nn.Linear(64, n_electrodes),
+            nn.Sigmoid()  # Keep output in [0,1] range
+        )
+        
+    def forward(self, x):
+        # Handle both 4D and 5D inputs
+        if len(x.shape) == 4:
+            x = x.unsqueeze(1)
+        
+        batch_size, seq_len = x.size(0), x.size(1)
+        
+        # Process each sequence element with CNN
+        features = []
+        for i in range(seq_len):
+            feat = self.feature_extractor(x[:, i])
+            features.append(feat.squeeze(-1).squeeze(-1))
+            
+            # Debug CNN output
+            print(f"CNN features range step {i}: [{feat.min():.3f}, {feat.max():.3f}]")
+        
+        features = torch.stack(features, dim=1)
+        #print(f"Stacked features shape: {features.shape}")
+        #print(f"Features range: [{features.min():.3f}, {features.max():.3f}]")
+        
+        # RNN
+        rnn_out, _ = self.rnn(features)
+        #print(f"RNN output range: [{rnn_out.min():.3f}, {rnn_out.max():.3f}]")
+        
+        # Get final output
+        last_output = rnn_out[:, -1]
+        out = self.fc(last_output)
+        
+        # NEW: Apply a power function to spread out values more
+        # This creates more contrast between high and low values
+        out = out ** 0.5  # Square root to spread out values more
+        
+        # Apply scaling
+        return out * self.output_scaling
+
+def get_debug_CRNN_autoencoder(cfg):
+    """Returns a simplified CRNN for debugging"""
+    encoder = SimpleCRNN(
+        in_channels=cfg['in_channels'],
+        n_electrodes=cfg['n_electrodes'],
+        out_scaling=cfg['output_scaling'],
+        out_activation=cfg['encoder_out_activation']
+    ).to(cfg['device'])
+    
+    decoder = E2E_Decoder(
+        out_channels=cfg['out_channels'],
+        out_activation=cfg['decoder_out_activation']
+    ).to(cfg['device'])
     
     return encoder, decoder

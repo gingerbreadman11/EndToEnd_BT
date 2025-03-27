@@ -150,3 +150,13 @@ class RGBConverter(object):
         image = torch.stack([self.weights[c]*image[:,c,:,:] for c in range(3)], dim=1)
         image = torch.sum(image,dim=1,keepdim=True)
         return image
+
+# Add this to utils.py
+def data_subset(dataset, subset_size):
+    """Take a subset of a dataset for faster debugging"""
+    from torch.utils.data import Subset
+    import random
+    
+    indices = list(range(len(dataset)))
+    random.shuffle(indices)
+    return Subset(dataset, indices[:subset_size])

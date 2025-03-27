@@ -115,7 +115,7 @@ def get_dataset(cfg):
     # ------------------------------------------------
     size = 128  
     mask = torch.ones(1, size, size)
-    y, x = torch.meshgrid(torch.linspace(-1, 1, size), torch.linspace(-1, 1, size))
+    y, x = torch.meshgrid(torch.linspace(-1, 1, size), torch.linspace(-1, 1, size), indexing='ij')
     mask *= (x.pow(2) + y.pow(2)) <= 1
     
     cfg['circular_mask'] = mask.to(cfg['device'])
@@ -136,6 +136,8 @@ def get_models(cfg):
         encoder, decoder = model.get_Zhao_autoencoder(cfg)
     elif cfg['model_architecture'] == 'crnn-autoencoder':
         encoder, decoder = model.get_CRNN_autoencoder(cfg)
+    elif cfg['model_architecture'] == 'debug-crnn':
+        encoder, decoder = model.get_debug_CRNN_autoencoder(cfg)
     else:
         raise NotImplementedError
 
@@ -205,7 +207,8 @@ def get_training_pipeline(cfg):
 def get_pipeline_unconstrained_image_autoencoder(cfg):
     def forward(batch, models, cfg, to_cpu=False):
         """Forward pass of the model."""
-
+        #print("Starting forward pass...")
+        
         # unpack
         encoder = models['encoder']
         decoder = models['decoder']
@@ -213,13 +216,27 @@ def get_pipeline_unconstrained_image_autoencoder(cfg):
 
         # Data manipulation
         image, _ = batch
+        #print(f"Input image shape: {image.shape}")
         unstandardized_image = undo_standardize(image) # image values scaled back to range 0-1
 
         # Forward pass
+        #print("Resetting simulator...")
         simulator.reset()
+        #print("Running encoder...")
         stimulation = encoder(image)
+        
+        # Add debug print to check stimulation values
+        stim_min = torch.min(stimulation).item()
+        stim_max = torch.max(stimulation).item()
+        stim_mean = torch.mean(stimulation).item()
+        print(f"Stimulation range: min={stim_min:.8f}, max={stim_max:.8f}, mean={stim_mean:.8f}")
+        
+        #print("Running simulator...")
         phosphenes = simulator(stimulation).unsqueeze(1)
+        #print(f"Phosphenes shape: {phosphenes.shape}")
+        #print("Running decoder...")
         reconstruction = decoder(phosphenes)
+        #print(f"Reconstruction shape: {reconstruction.shape}")
 
         # Output dictionary
         out = {'input':  unstandardized_image * cfg['circular_mask'],
@@ -227,7 +244,8 @@ def get_pipeline_unconstrained_image_autoencoder(cfg):
                'phosphenes': phosphenes,
                'reconstruction': reconstruction * cfg['circular_mask'],
                'input_resized': resize(unstandardized_image * cfg['circular_mask'], cfg['SPVsize'])}
-
+        
+        #print("Forward pass complete!")
         if to_cpu:
             # Return a cpu-copy of the model output
             out = {k: v.detach().cpu().clone() for k, v in out.items()}
