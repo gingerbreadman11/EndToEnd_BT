@@ -56,6 +56,10 @@ def train(dataset, models, training_pipeline, logging, cfg):
             # Backward pass
             optimizer.zero_grad()
             total_loss.backward(retain_graph=False)
+
+            # Alex------------ added this in hope of stabilizing training for CRNN
+            torch.nn.utils.clip_grad_norm_(models['encoder'].parameters(), max_norm=1.0)
+
             optimizer.step()
 
             # Track the loss summary

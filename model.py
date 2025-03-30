@@ -332,6 +332,8 @@ class CRNN(nn.Module):
         self.feature_extractor = efficientnet_b0(weights=EfficientNet_B0_Weights.IMAGENET1K_V1)
         # Replace first conv layer if input channels != 3
         if in_channels != 3:
+            print(f"Changing input channels from {in_channels} to 3")
+            
             self.feature_extractor.features[0][0] = nn.Conv2d(in_channels, 32, kernel_size=3, stride=2, padding=1, bias=False)
         
         # Remove the classifier head
@@ -359,11 +361,14 @@ class CRNN(nn.Module):
         # but our model expects [batch_size, sequence_length, channels, height, width]
         
         # Check if input is 4D (missing sequence dimension)
-        if len(x.shape) == 4:
-            # Add a sequence dimension with length 1
-            x = x.unsqueeze(1)  # Now [batch_size, 1, channels, height, width]
         
-        batch_size, seq_len = x.size(0), x.size(1)
+        
+        if len(x.shape) == 4:
+            x = x.unsqueeze(1)
+            print("Input is not sequential - adding sequence dimension")
+        else:
+            print("Input is sequential with shape", x.shape)
+            batch_size, seq_len = x.size(0), x.size(1)
         
         # Reshape for CNN processing
         x_reshaped = x.view(batch_size * seq_len, *x.shape[2:])
@@ -422,40 +427,42 @@ class SimpleCRNN(nn.Module):
         self.output_scaling = out_scaling
         self.n_electrodes = n_electrodes
         
+        self.out_activation = {'relu': nn.ReLU(),
+                              'sigmoid': nn.Sigmoid()}[out_activation]
         
-
-        self.out_activation = {'tanh': nn.Tanh(), ## NOTE: simulator expects only positive stimulation values 
-                               'sigmoid': nn.Sigmoid(),
-                               'relu': nn.ReLU(),
-                               'softmax':nn.Softmax(dim=1)}[out_activation]
-        
-        # Simple CNN backbone with better feature differentiation
+        # CNN backbone similar to E2E_Encoder
         self.feature_extractor = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.BatchNorm2d(16),
-            nn.Conv2d(16, 32, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.BatchNorm2d(32),
+            *convlayer(in_channels, 8, 3, 1, 1),
+            *convlayer(8, 16, 3, 1, 1, resample_out=nn.MaxPool2d(2)),
+            *convlayer(16, 32, 3, 1, 1, resample_out=nn.MaxPool2d(2)),
+            ResidualBlock(32, resample_out=None),
+            *convlayer(32, 16, 3, 1, 1),
+            nn.Conv2d(16, 8, 3, 1, 1),
             nn.AdaptiveAvgPool2d((1, 1))
         )
         
-        # Simple RNN
-        self.rnn = nn.LSTM(32, 64, batch_first=True)
+        # Standard LSTM without layer_norm
+        self.rnn = nn.LSTM(8, 32, batch_first=True)
         
-        # Output layer with controlled range
+        # Add LayerNorm *after* the LSTM
+        self.layer_norm = nn.LayerNorm(32)
+        
+        # Output layer
         self.fc = nn.Sequential(
-            nn.Linear(64, n_electrodes),
-            nn.Sigmoid()  # Keep output in [0,1] range
+            nn.Linear(32, n_electrodes),
+            self.out_activation
         )
         
     def forward(self, x):
         # Handle both 4D and 5D inputs
         if len(x.shape) == 4:
             x = x.unsqueeze(1)
+            #print("Input is not sequential - adding sequence dimension")
+        else:
+            #print("Input is sequential with shape", x.shape)
         
+            batch_size, seq_len = x.size(0), x.size(1)
         batch_size, seq_len = x.size(0), x.size(1)
-        
         # Process each sequence element with CNN
         features = []
         for i in range(seq_len):
@@ -463,26 +470,26 @@ class SimpleCRNN(nn.Module):
             features.append(feat.squeeze(-1).squeeze(-1))
             
             # Debug CNN output
-            print(f"CNN features range step {i}: [{feat.min():.3f}, {feat.max():.3f}]")
+            #print(f"CNN features range step {i}: [{feat.min():.3f}, {feat.max():.3f}]")
         
         features = torch.stack(features, dim=1)
         #print(f"Stacked features shape: {features.shape}")
         #print(f"Features range: [{features.min():.3f}, {features.max():.3f}]")
         
-        # RNN
+        # RNN with gradient clipping
         rnn_out, _ = self.rnn(features)
-        #print(f"RNN output range: [{rnn_out.min():.3f}, {rnn_out.max():.3f}]")
+        
+        # Apply layer normalization to the output
+        normalized_out = self.layer_norm(rnn_out)
         
         # Get final output
-        last_output = rnn_out[:, -1]
+        last_output = normalized_out[:, -1]
         out = self.fc(last_output)
         
-        # NEW: Apply a power function to spread out values more
-        # This creates more contrast between high and low values
-        out = out ** 0.5  # Square root to spread out values more
-        
         # Apply scaling
-        return out * self.output_scaling
+        stimulation = out * self.output_scaling
+        #print(f"Stimulation range: [{stimulation.min():.3f}, {stimulation.max():.3f}]")
+        return stimulation
 
 def get_debug_CRNN_autoencoder(cfg):
     """Returns a simplified CRNN for debugging"""
