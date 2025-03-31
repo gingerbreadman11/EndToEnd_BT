@@ -29,10 +29,10 @@ e2e_models:
 
 optimization:
     learning_rate : 0.0005 # was 0.00005 
-    epochs : 5
+    epochs : 75
     trainstats_per_epoch : 3
     validations_per_epoch: 1
-    early_stop_criterium : 20
+    early_stop_criterium : 5
 
 training_pipeline:
     pipeline: image-autoencoder-interaction-model
