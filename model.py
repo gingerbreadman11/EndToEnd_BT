@@ -172,7 +172,16 @@ class E2E_Encoder(nn.Module):
     def forward(self, x):
         self.out = self.model(x)
         stimulation = self.out*self.output_scaling #scaling improves numerical stability
-        print(f"Stimulation range: [{stimulation.min():.3f}, {stimulation.max():.3f}]")
+            # Print detailed information about the stimulation vector
+        print(f"Stimulation shape: {stimulation.shape}")
+        print(f"First 10 values: {stimulation[0, :10]}")  # First 10 values of first batch
+        print(f"Mean value: {stimulation.mean():.6f}")
+        print(f"Unique values: {torch.unique(stimulation)[:10]}")  # First 10 unique values
+        print(f"Number of non-zero elements: {torch.count_nonzero(stimulation)}")
+        
+        # If you want to see the full vector (be careful with large vectors!)
+        if stimulation.shape[1] <= 100:  # Only print if vector is not too large
+            print(f"Full stimulation vector: {stimulation[0]}")
         return stimulation
 
 class E2E_Decoder(nn.Module):
