@@ -337,14 +337,38 @@ class CRNN(nn.Module):
                               'relu': nn.ReLU(),
                               'softmax': nn.Softmax(dim=1)}[out_activation]
         
-        # Load pretrained EfficientNet_B0
+        #load pretrained EfficientNet_B0
         self.feature_extractor = efficientnet_b0(weights=EfficientNet_B0_Weights.IMAGENET1K_V1)
+        print(self.feature_extractor)
+        print(self.feature_extractor.features[0][0])
+        print(in_channels)
         # Replace first conv layer if input channels != 3
         if in_channels != 3:
             print(f"Changing input channels from {in_channels} to 3")
             
             self.feature_extractor.features[0][0] = nn.Conv2d(in_channels, 32, kernel_size=3, stride=2, padding=1, bias=False)
         
+        # # BT_Alex possible attempt to no delete the first layer but save a mixture of the 3 channels
+        # backbone = efficientnet_b0(weights=EfficientNet_B0_Weights.IMAGENET1K_V1)
+
+        # # Replace input conv layer for grayscale or arbitrary input channels
+        # if in_channels != 3:
+        #     print(f"Changing input channels from 3 to {in_channels}")
+        #     old_conv = backbone.features[0][0]
+        #     new_conv = nn.Conv2d(in_channels, old_conv.out_channels,
+        #                          kernel_size=old_conv.kernel_size,
+        #                          stride=old_conv.stride,
+        #                          padding=old_conv.padding,
+        #                          bias=old_conv.bias)
+        #     if in_channels == 1:
+        #         new_conv.weight.data = old_conv.weight.data.mean(dim=1, keepdim=True)
+        #     else:
+        #         nn.init.kaiming_normal_(new_conv.weight, mode='fan_out', nonlinearity='relu')
+        #     backbone.features[0][0] = new_conv
+
+        # # Remove classification head
+        # self.feature_extractor = backbone.features
+
         # Remove the classifier head
         self.feature_extractor = self.feature_extractor.features
         
@@ -369,15 +393,17 @@ class CRNN(nn.Module):
         # MNIST gives us [batch_size, channels, height, width]
         # but our model expects [batch_size, sequence_length, channels, height, width]
         
+        # First get batch_size from input
+        batch_size = x.size(0)
+        
         # Check if input is 4D (missing sequence dimension)
-        
-        
         if len(x.shape) == 4:
             x = x.unsqueeze(1)
+            seq_len = 1
             print("Input is not sequential - adding sequence dimension")
         else:
             print("Input is sequential with shape", x.shape)
-            batch_size, seq_len = x.size(0), x.size(1)
+            seq_len = x.size(1)
         
         # Reshape for CNN processing
         x_reshaped = x.view(batch_size * seq_len, *x.shape[2:])
@@ -398,6 +424,14 @@ class CRNN(nn.Module):
         
         # Apply scaling
         stimulation = stimulation * self.output_scaling
+        # Print detailed information about the stimulation vector
+        print(f"Stimulation shape: {stimulation.shape}")
+        print(f"First 10 values: {stimulation[0, :10]}")  # First 10 values of first batch
+        #print(f"Mean value: {stimulation.mean():.6f}")
+        #print(f"Unique values: {torch.unique(stimulation)[:10]}")  # First 10 unique values
+        print(f"Number of non-zero elements: {torch.count_nonzero(stimulation)}")
+
+        
         
         return stimulation
 
@@ -417,8 +451,9 @@ def get_CRNN_autoencoder(cfg):
     decoder = E2E_Decoder(out_channels=cfg['out_channels'],
                           out_activation=cfg['decoder_out_activation']).to(cfg['device'])
     
-    # Apply safety layer if specified
+    # safety layer
     if cfg.get('output_steps', 'None') != 'None':
+        print("Applying safety layer/ this should not happen")
         assert cfg['encoder_out_activation'] == 'sigmoid'
         encoder.output_scaling = 1.0
         encoder = torch.nn.Sequential(encoder,
@@ -495,7 +530,7 @@ class SimpleCRNN(nn.Module):
         last_output = normalized_out[:, -1]
         out = self.fc(last_output)
         
-        # Apply scaling
+        #scaling
         stimulation = out * self.output_scaling
         #print(f"Stimulation range: [{stimulation.min():.3f}, {stimulation.max():.3f}]")
         return stimulation
