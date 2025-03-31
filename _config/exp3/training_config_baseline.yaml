@@ -5,6 +5,8 @@ general:
     use_deterministic_algorithms: False
     batch_size: 4
 
+
+
     #device: 'cuda:0' 
     device: 'cpu'
     gpu : 0

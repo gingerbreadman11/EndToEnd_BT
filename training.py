@@ -185,6 +185,8 @@ def load_models(models, cfg, prefix='best'):
         if isinstance(model, torch.nn.Module):
             fn = os.path.join(cfg['save_path'], 'checkpoints', f'{prefix}_{name}.pth')
             model.load_state_dict(torch.load(fn, map_location=cfg['device']))
+            print(f"Loaded model {name} from {fn}")
+            print("test")
 
 def get_validation_results(dataset, models, training_pipeline, cfg):
     output = CustomSummaryTracker()
@@ -229,6 +231,15 @@ def main(args):
     # Initialize training
     cfg = load_config(args.config)
     models = init_training.get_models(cfg)
+    
+    # Add this to load pre-trained models before training
+    try:
+        print("Attempting to load pre-trained models.(code training.py line 234)")
+        load_models(models, cfg, prefix='best')
+        print("Successfully loaded pre-trained models")
+    except Exception as e:
+        print(f"Could not load pre-trained models: {str(e)}")
+    
     dataset = init_training.get_dataset(cfg)
     training_pipeline = init_training.get_training_pipeline(cfg)
     logging = init_training.get_logging(cfg)
