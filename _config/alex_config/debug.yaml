@@ -1,0 +1,49 @@
+Description:
+    model_name: debug_minimal
+
+general: 
+    use_deterministic_algorithms: False
+    batch_size: 4  # Very small batch for testing
+    device: 'cpu'
+    gpu: 0
+    save_path: ./Data_Storage/Debug_CRNN  # Updated path
+    save_output: [phosphenes, stimulation, reconstruction, input]
+    
+simulator:
+    base_config: ./_config/exp3/simulator_config.yaml
+    use_threshold: True
+    phosphene_map: ./_config/phosphene_maps/phosphene_coords_60.pickle
+    electrode_coords: ./_config/phosphene_maps/electrode_coords_60.pickle    
+    
+e2e_models:
+    model_architecture: debug-crnn  # Use our simplified model
+    in_channels: 1
+    n_electrodes: 60
+    output_scaling: 128.0e-6
+    output_steps: None
+    out_channels: 1
+    encoder_out_activation: relu
+    decoder_out_activation: sigmoid
+    rnn_type: lstm
+    hidden_size: 64  # Smaller
+    sequence_length: 1  # Just process one frame
+
+optimization:
+    learning_rate: 0.01
+    epochs: 30  # Just run one epoch for testing
+    trainstats_per_epoch: 3
+    validations_per_epoch: 1
+    early_stop_criterium: 5 
+
+training_pipeline:
+    pipeline: image-autoencoder-interaction-model  # tried before:unconstrained-image-autoencoder  # Use a simpler pipeline
+    regularization_weight: 0.5
+    target_brightness_scale: 0.9
+    interaction: no-interaction
+
+dataset:
+    dataset: MNIST
+    data_directory: './_Datasets/MNIST'
+    flip_vertical: True
+    flip_horizontal: False
+    # subset: 100  # Use only 100 samples for testing 

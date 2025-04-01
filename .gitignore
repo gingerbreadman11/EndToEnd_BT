@@ -3,10 +3,5 @@ Out
 __pycache__
 vbt
 _Datasets
-_config/alex_config
-_config/exp3
-_config/phosphene_maps
-_config/simulator_config.yaml
-_config/training_config_baseline.yaml
-_config/video_config.yaml
+
 

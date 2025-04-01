@@ -15,6 +15,7 @@ import string
 import utils
 from tqdm import tqdm
 from torchvision import datasets, transforms
+import random
 
 def get_ade20k_dataset(cfg):
     trainset = ADE_Dataset(device=cfg['device'],
@@ -401,14 +402,41 @@ def get_mnist_dataset(cfg):
     # Use the absolute path to your MNIST data
     absolute_path = '/Users/alexanderbensland/Desktop/Bachelor Thesis/Code/EndToEnd_BT/_Datasets'
     
-    # Load the datasets with the absolute path
+    # Create base MNIST datasets
     trainset = tv.datasets.MNIST(root=absolute_path, train=True, download=False, transform=transform)
     valset = tv.datasets.MNIST(root=absolute_path, train=False, download=False, transform=transform)
-
+    
+    # Wrap with sequence dataset if sequence_length > 1
+    if cfg.get('sequence_length', 1) > 1:
+        print('sequence length > 1' line 411)
+        trainset = MNIST_Sequence(trainset, sequence_length=cfg['sequence_length'], device=cfg.get('device', 'cpu'))
+        valset = MNIST_Sequence(valset, sequence_length=cfg['sequence_length'], device=cfg.get('device', 'cpu'))
+    
     if cfg.get('subset', False):
         print("Using subset of the data")
         trainset = utils.data_subset(trainset, cfg['subset'])
         valset = utils.data_subset(valset, cfg['subset'])
 
     return trainset, valset
+
+class MNIST_Sequence(Dataset):
+    """Wrapper for MNIST dataset that creates sequences"""
+    def __init__(self, base_dataset, sequence_length=5, device=torch.device('cpu')):
+        self.dataset = base_dataset
+        self.sequence_length = sequence_length
+        self.device = device
+        
+    def __len__(self):
+        return len(self.dataset)
+        
+    def __getitem__(self, idx):
+        img, label = self.dataset[idx]
+        # Option 1: Repeat the same image multiple times to create a sequence
+        sequence = img.unsqueeze(0).repeat(self.sequence_length, 1, 1, 1)
+        
+        # Option 2 (more interesting): Create a sequence of different digits
+        # indices = [idx] + [random.randint(0, len(self.dataset)-1) for _ in range(self.sequence_length-1)]
+        # sequence = torch.stack([self.dataset[i][0] for i in indices])
+        
+        return sequence.to(self.device), label.to(self.device)
 

@@ -1,0 +1,50 @@
+Description:
+    model_name: crnn_debug_v1
+
+general: 
+    use_deterministic_algorithms: False
+    batch_size: 4  # Small batch size for faster iterations
+    #device: 'cuda:0' noooo
+    device: 'cpu'
+    gpu: 0
+    save_path: ./Data_Storage/CRNN
+    save_output: [phosphenes, stimulation, reconstruction, input]
+    
+simulator:
+    base_config: ./_config/exp3/simulator_config.yaml
+    use_threshold: True
+    phosphene_map: ./_config/phosphene_maps/phosphene_coords_60.pickle
+    electrode_coords: ./_config/phosphene_maps/electrode_coords_60.pickle    
+    
+e2e_models:
+    model_architecture: crnn-autoencoder  #new architecture
+    in_channels: 1
+    n_electrodes: 60
+    output_scaling: 128.0e-6
+    output_steps: None
+    out_channels: 1
+    encoder_out_activation: sigmoid
+    decoder_out_activation: sigmoid
+    # CRNN specific parameters
+    rnn_type: lstm
+    hidden_size: 128  # Smaller than default for faster training
+    sequence_length: 3  # attempt to get the model to learn the sequence
+
+optimization:
+    learning_rate: 0.0001
+    epochs: 30  # Reduced for faster debugging
+    trainstats_per_epoch: 10  # More frequent updates for debugging
+    validations_per_epoch: 2
+    early_stop_criterium: 5 
+
+training_pipeline:
+    pipeline: image-autoencoder-interaction-model
+    regularization_weight: 0.99999
+    target_brightness_scale: 0.9
+    interaction: no-interaction
+    
+dataset:
+    dataset: MNIST
+    data_directory: './_Datasets/MNIST'
+    flip_vertical: True
+    flip_horizontal: False 
