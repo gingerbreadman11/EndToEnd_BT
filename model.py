@@ -173,10 +173,10 @@ class E2E_Encoder(nn.Module):
         self.out = self.model(x)
         stimulation = self.out*self.output_scaling #scaling improves numerical stability
             # Print detailed information about the stimulation vector
-        print(f"Stimulation shape: {stimulation.shape}")
-        print(f"First 10 values: {stimulation[0, :10]}")  # First 10 values of first batch
-        print(f"Mean value: {stimulation.mean():.6f}")
-        print(f"Unique values: {torch.unique(stimulation)[:10]}")  # First 10 unique values
+        #print(f"Stimulation shape: {stimulation.shape}")
+        #print(f"First 10 values: {stimulation[0, :10]}")  # First 10 values of first batch
+        #print(f"Mean value: {stimulation.mean():.6f}")
+        #print(f"Unique values: {torch.unique(stimulation)[:10]}")  # First 10 unique values
         print(f"Number of non-zero elements: {torch.count_nonzero(stimulation)}")
         
         # If you want to see the full vector (be careful with large vectors!)
@@ -339,9 +339,9 @@ class CRNN(nn.Module):
         
         #load pretrained EfficientNet_B0
         self.feature_extractor = efficientnet_b0(weights=EfficientNet_B0_Weights.IMAGENET1K_V1)
-        print(self.feature_extractor)
-        print(self.feature_extractor.features[0][0])
-        print(in_channels)
+        #print(self.feature_extractor)
+        #print(self.feature_extractor.features[0][0])
+        #print(in_channels)
         # Replace first conv layer if input channels != 3
         if in_channels != 3:
             print(f"Changing input channels from {in_channels} to 3")
@@ -400,7 +400,7 @@ class CRNN(nn.Module):
         if len(x.shape) == 4:
             x = x.unsqueeze(1)
             seq_len = 1
-            print("Input is not sequential - adding sequence dimension")
+            #print("Input is not sequential - adding sequence dimension")
         else:
             print("Input is sequential with shape", x.shape)
             seq_len = x.size(1)
@@ -415,7 +415,7 @@ class CRNN(nn.Module):
         
         # Process with RNN
         rnn_out, _ = self.rnn(features)
-        
+        print('rnn out')
         # Get output for last time step
         last_output = rnn_out[:, -1, :]
         
@@ -425,11 +425,11 @@ class CRNN(nn.Module):
         # Apply scaling
         stimulation = stimulation * self.output_scaling
         # Print detailed information about the stimulation vector
-        print(f"Stimulation shape: {stimulation.shape}")
-        print(f"First 10 values: {stimulation[0, :10]}")  # First 10 values of first batch
+        #print(f"Stimulation shape: {stimulation.shape}")
+        #print(f"First 10 values: {stimulation[0, :10]}")  # First 10 values of first batch
         #print(f"Mean value: {stimulation.mean():.6f}")
         #print(f"Unique values: {torch.unique(stimulation)[:10]}")  # First 10 unique values
-        print(f"Number of non-zero elements: {torch.count_nonzero(stimulation)}")
+        #print(f"Number of non-zero elements: {torch.count_nonzero(stimulation)}")
 
         
         
@@ -450,7 +450,7 @@ def get_CRNN_autoencoder(cfg):
     # Initialize decoder (reuse existing E2E_Decoder)
     decoder = E2E_Decoder(out_channels=cfg['out_channels'],
                           out_activation=cfg['decoder_out_activation']).to(cfg['device'])
-    
+    print('encoder and decoder initialized')
     # safety layer
     if cfg.get('output_steps', 'None') != 'None':
         print("Applying safety layer/ this should not happen")
