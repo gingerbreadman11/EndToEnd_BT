@@ -232,13 +232,16 @@ def main(args):
     cfg = load_config(args.config)
     models = init_training.get_models(cfg)
     
-    # Add this to load pre-trained models before training
-    try:
-        print("Attempting to load pre-trained models.(code training.py line 234)")
-        load_models(models, cfg, prefix='best')
-        print("Successfully loaded pre-trained models")
-    except Exception as e:
-        print(f"Could not load pre-trained models: {str(e)}")
+    # Check if we should load pre-trained models
+    if cfg.get('load_pretrained', False):  # Default to False if parameter is missing
+        try:
+            print("Attempting to load pre-trained models...")
+            load_models(models, cfg, prefix='best')
+            print("Successfully loaded pre-trained models")
+        except Exception as e:
+            print(f"Could not load pre-trained models: {str(e)}")
+    else:
+        print("Training model from scratch (not loading pre-trained weights)")
     
     dataset = init_training.get_dataset(cfg)
     training_pipeline = init_training.get_training_pipeline(cfg)

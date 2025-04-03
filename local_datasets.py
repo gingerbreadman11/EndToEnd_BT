@@ -408,7 +408,7 @@ def get_mnist_dataset(cfg):
     
     # Wrap with sequence dataset if sequence_length > 1
     if cfg.get('sequence_length', 1) > 1:
-        print('sequence length > 1' line 411)
+        print('sequence length > 1 line 411')
         trainset = MNIST_Sequence(trainset, sequence_length=cfg['sequence_length'], device=cfg.get('device', 'cpu'))
         valset = MNIST_Sequence(valset, sequence_length=cfg['sequence_length'], device=cfg.get('device', 'cpu'))
     
@@ -437,6 +437,5 @@ class MNIST_Sequence(Dataset):
         # Option 2 (more interesting): Create a sequence of different digits
         # indices = [idx] + [random.randint(0, len(self.dataset)-1) for _ in range(self.sequence_length-1)]
         # sequence = torch.stack([self.dataset[i][0] for i in indices])
-        
-        return sequence.to(self.device), label.to(self.device)
+        return sequence.to(self.device), torch.tensor(label).to(self.device)
 

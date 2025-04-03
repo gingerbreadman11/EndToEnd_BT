@@ -9,6 +9,7 @@ general:
     gpu: 0
     save_path: ./Data_Storage/CRNN
     save_output: [phosphenes, stimulation, reconstruction, input]
+    load_pretrained: False  # Set to True if you want to load pre-trained model
     
 simulator:
     base_config: ./_config/exp3/simulator_config.yaml

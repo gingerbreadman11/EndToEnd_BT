@@ -423,7 +423,10 @@ def get_pipeline_interaction_model(cfg):
 
         # Data manipulation
         image, _ = batch
-
+        
+        # Check if we have sequence data (5D tensor)
+        has_sequence = len(image.shape) == 5
+        
         # Forward pass
         simulator.reset()
         stimulation = encoder(image)
@@ -431,13 +434,36 @@ def get_pipeline_interaction_model(cfg):
         phosphenes = simulator(interaction).unsqueeze(1)
         reconstruction = decoder(phosphenes)
 
-        # Output dictionary
-        out = {'input':  image * cfg['circular_mask'],
-               'stimulation': stimulation,
-               'interaction': interaction,
-               'phosphenes': phosphenes,
-               'reconstruction': reconstruction * cfg['circular_mask'],
-               'input_resized': resize(image * cfg['circular_mask'], cfg['SPVsize'])}
+        # Output dictionary with proper handling for both sequence and non-sequence data
+        if has_sequence:
+            # warning: this is not correct, we should use the whole sequence for the circular mask and resizing
+            # we lose information about the sequence
+            # For sequence data, we need to match dimensions
+            # Original image: [batch, seq, channel, height, width]
+            # Reconstruction: [batch, channel, height, width]
+            
+            # Take just the last frame from the sequence for comparison
+            last_frame = image[:, -1]  # Shape: [batch, channel, H, W]
+            
+            out = {
+                # Keep full sequence for reference
+                'full_input': image,
+                # For loss calculation use just the matching frame
+                'input': last_frame * cfg['circular_mask'],
+                'stimulation': stimulation,
+                'interaction': interaction,
+                'phosphenes': phosphenes,
+                'reconstruction': reconstruction * cfg['circular_mask'],
+                'input_resized': resize(last_frame * cfg['circular_mask'], cfg['SPVsize'])
+            }
+        else:
+            # Original code for non-sequence data
+            out = {'input': image * cfg['circular_mask'],
+                  'stimulation': stimulation,
+                  'interaction': interaction,
+                  'phosphenes': phosphenes,
+                  'reconstruction': reconstruction * cfg['circular_mask'],
+                  'input_resized': resize(image * cfg['circular_mask'], cfg['SPVsize'])}
         
         # Target phosphene brightness is sampled pixels at centers of the phosphenes
         target_pixels = simulator.sample_centers(out['input_resized']).squeeze()
