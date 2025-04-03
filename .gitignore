@@ -3,5 +3,6 @@ Out
 __pycache__
 vbt
 _Datasets
+.DS_Store
 
 
