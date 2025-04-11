@@ -1,3 +1,5 @@
+# Made this a Private Repo
+
 # Simulation-based optimization of prosthetic vision through end-to-end neural nets. 
 
 ## About
